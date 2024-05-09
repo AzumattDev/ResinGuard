@@ -19,12 +19,6 @@ static class WearNTearAwakePatch
         __instance.gameObject.TryGetComponent(out ResinProtection resinProtection);
         if (resinProtection == null) __instance.gameObject.AddComponent<ResinProtection>();
 
-        // If there is resin protection, set the max health to 50% more than the default
-        if (resinProtection != null && resinProtection.GetResin() > 0.0)
-        {
-            __instance.m_health = resinProtection.originalHealth * 1.5f;
-        }
-
         // Update health based on current resin level
         UpdateHealth(__instance, resinProtection);
     }
@@ -121,7 +115,7 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
     public void Update()
     {
         if (!(GetResin() > 0)) return;
-        float decayAmount = Time.deltaTime / ResinGuardPlugin.DecayTime.Value; // 1 hour
+        float decayAmount = Time.deltaTime / ResinGuardPlugin.DecayTime.Value; // 1 hour default
         SetResin(Mathf.Max(0, GetResin() - decayAmount), true);
     }
 
