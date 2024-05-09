@@ -37,6 +37,12 @@ across all clients.
 - **Water Protection**: Applying tar provides immediate and permanent protection from water damage until it is manually
   removed or altered.
 
+## Likely to ask questions:
+- `Will you get your tar and resin back if destroyed?` Yes, you get your tar and resin back if you remove the building piece.
+- `Can you apply resin and tar to the same building piece?` Yes, you can apply both to the same building piece.
+- `Can you apply resin and tar to the same building piece multiple times?` Yes and no, you can apply both, but only resin multiple times. Tar is a permanent application until removal of the building piece.
+- `Can you apply resin and tar to all building pieces?` Yes, you can apply resin and tar to all building pieces that have a WearNTear component. However, if it is already hoverable, it will not apply to it due to how I've implemented it currently.
+
 ## Configuration
 
 - **Decay Time**: Set the time it takes for resin to fully decay. Default is 3600 seconds (1 hour).
