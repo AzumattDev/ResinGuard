@@ -11,27 +11,6 @@ namespace ResinGuard;
 // TODO: Probably add filtering for what this applies to, for now it's fine.
 // TODO: Maybe create an item that applies resin to the object? Instead of using the UseItem method that is already in place.
 
-[HarmonyPatch(typeof(WearNTear), nameof(WearNTear.Awake))]
-static class WearNTearAwakePatch
-{
-    static void Postfix(WearNTear __instance)
-    {
-        __instance.gameObject.TryGetComponent(out ResinProtection resinProtection);
-        if (resinProtection == null) __instance.gameObject.AddComponent<ResinProtection>();
-
-        // Update health based on current resin level
-        UpdateHealth(__instance, resinProtection);
-    }
-
-    private static void UpdateHealth(WearNTear instance, ResinProtection? resinProtection)
-    {
-        if (resinProtection != null && resinProtection.GetResin() > 0.0)
-        {
-            // Calculate the new health as a linear interpolation between the original health and double the health
-            instance.m_health = resinProtection.originalHealth * (1.0f + resinProtection.GetResin() / resinProtection.m_maxResin);
-        }
-    }
-}
 
 [HarmonyPatch(typeof(WearNTear), nameof(WearNTear.IsWet))]
 static class WearNTearIsWetPatch
@@ -72,6 +51,26 @@ public static class RemoveWearNTear
     }
 }
 
+[HarmonyPatch(typeof(WearNTear), nameof(WearNTear.ApplyDamage))]
+static class WearNTearApplyDamagePatch
+{
+    static void Prefix(WearNTear __instance, ref float damage, HitData hitData = null)
+    {
+        __instance.gameObject.TryGetComponent(out ResinProtection resinProtection);
+        if (resinProtection == null)
+            return;
+        if (resinProtection.GetResin() > 0.0 && hitData == null)
+        {
+            float resinRatio = Mathf.Clamp01(resinProtection.GetResin() / resinProtection.m_maxResin);
+            float damageBeforeResin = damage;
+            damage *= 1.0f - resinRatio;
+#if DEBUG
+            ResinGuardPlugin.ResinGuardLogger.LogDebug($"Damage before resin: {damageBeforeResin}, Damage after resin: {damage}");
+#endif
+        }
+    }
+}
+
 public class ResinProtection : MonoBehaviour, Hoverable, Interactable
 {
     public const string ResinTokenName = "$item_resin";
@@ -85,10 +84,10 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
     public static readonly int s_Resin = "resinProtection".GetStableHashCode();
     public static readonly int s_Tar = "tarProtection".GetStableHashCode();
     public static readonly int s_TotalProtection = "totalProtection".GetStableHashCode();
-    public int m_maxResin = 10;
+    public int m_maxResin = ResinGuardPlugin.MaxResin.Value;
     public int m_maxTar = 1;
-    public float originalHealth;
-    public StringBuilder hoverTextBuilder = new();
+    public readonly StringBuilder HoverTextBuilder = new();
+    public readonly Dictionary<Renderer, Color> OriginalColors = new();
 
     public void Awake()
     {
@@ -96,7 +95,6 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
         if (m_nview == null)
             m_nview = GetComponentInParent<ZNetView>();
         m_wearNTear = GetComponent<WearNTear>();
-        originalHealth = m_wearNTear.m_health;
         m_piece = GetComponent<Piece>();
         if (m_nview.GetZDO() == null)
             return;
@@ -110,10 +108,25 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
             if (item != null)
                 m_resinItemDrops.Add(item);
         }
+
+        if (m_wearNTear != null)
+        {
+            m_wearNTear.m_propertyBlock ??= new MaterialPropertyBlock();
+            foreach (Renderer? renderer in m_wearNTear.m_renderers)
+            {
+                renderer.GetPropertyBlock(m_wearNTear.m_propertyBlock);
+
+                int colorPropertyID = Shader.PropertyToID("_Color");
+                Color originalColor = m_wearNTear.m_propertyBlock.GetColor(colorPropertyID);
+                OriginalColors.Add(renderer, originalColor);
+            }
+        }
     }
 
     public void Update()
     {
+        UpdateVisualAppearance();
+
         if (!(GetResin() > 0)) return;
         float decayAmount = Time.deltaTime / ResinGuardPlugin.DecayTime.Value; // 1 hour default
         SetResin(Mathf.Max(0, GetResin() - decayAmount), true);
@@ -121,25 +134,25 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
 
     public string GetHoverText()
     {
-        hoverTextBuilder.Clear();
-        hoverTextBuilder.Append(Localization.instance.Localize(m_piece.m_name));
+        HoverTextBuilder.Clear();
+        HoverTextBuilder.Append(Localization.instance.Localize(m_piece.m_name));
 
         // Check and display resin status
         if (GetResin() >= m_maxResin)
-            hoverTextBuilder.Append($" {Environment.NewLine}{ResinTokenName}: ($msg_itsfull)");
+            HoverTextBuilder.Append($" {Environment.NewLine}{ResinTokenName}: ($msg_itsfull)");
         else
         {
-            hoverTextBuilder.Append(GetResin() > 0 ? $" {Environment.NewLine}{ResinTokenName}: ({Mathf.Ceil(GetResin())}/{m_maxResin})" : $" {Environment.NewLine}{ResinTokenName}: (0/{m_maxResin})");
+            HoverTextBuilder.Append(GetResin() > 0 ? $" {Environment.NewLine}{ResinTokenName}: ({Mathf.Ceil(GetResin())}/{m_maxResin})" : $" {Environment.NewLine}{ResinTokenName}: (0/{m_maxResin})");
         }
 
         // Check and display tar status
-        hoverTextBuilder.Append(GetTar() > 0 ? $" {Environment.NewLine}$se_tared_name: ($piece_guardstone_active)" : $" {Environment.NewLine}$se_tared_name: ($piece_guardstone_inactive)");
+        HoverTextBuilder.Append(GetTar() > 0 ? $" {Environment.NewLine}$se_tared_name: ($piece_guardstone_active)" : $" {Environment.NewLine}$se_tared_name: ($piece_guardstone_inactive)");
 #if DEBUG
         // Add m_health value
         hoverTextBuilder.Append($"\nHealth: {m_wearNTear.m_health}\n ZDOHealth: {m_wearNTear.m_nview.GetZDO().GetFloat(ZDOVars.s_health)}\n Health Percentage: {m_wearNTear.GetHealthPercentage()}");
 #endif
 
-        return Localization.instance.Localize(hoverTextBuilder.ToString());
+        return Localization.instance.Localize(HoverTextBuilder.ToString());
     }
 
     public string GetHoverName() => string.Empty;
@@ -150,9 +163,10 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
     public bool UseItem(Humanoid user, ItemDrop.ItemData item)
     {
         if (item == null) return false;
-        if (!m_resinItems.Contains(item.m_shared.m_name) && item.m_shared.m_name != "$item_hammer")
+        if (!m_resinItems.Contains(item.m_shared.m_name))
         {
-            user.Message(MessageHud.MessageType.Center, "$msg_wrongitem");
+            if (item.m_shared.m_buildPieces == null || item.m_shared.m_buildPieces.m_pieces.Count == 0) // Eliminate hammers from seeing this message. It's highly annoying when going to repair the piece.
+                user.Message(MessageHud.MessageType.Center, "$msg_wrongitem");
             return false;
         }
 
@@ -182,7 +196,6 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
         {
             case $"{ResinTokenName}":
                 SetResin(GetResin() + 1f);
-                m_wearNTear.m_health = originalHealth * (1.0f + GetResin() / m_maxResin);
                 break;
             case $"{TarTokenName}":
                 SetTar(GetTar() + 1f);
@@ -198,10 +211,6 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
         m_nview.GetZDO().Set(s_TotalProtection, resin + GetTar());
         if (!isUpdate)
             m_onProtectionAdded?.Invoke();
-        else
-        {
-            m_wearNTear.m_health = originalHealth * (1.0f + GetResin() / m_maxResin);
-        }
     }
 
     public void SetTar(float resin)
@@ -229,7 +238,9 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
             return;
         m_piece.m_placeEffect?.Create(transform.position, transform.rotation, transform, 1f);
         m_wearNTear.m_hitEffect.Create(transform.position, transform.rotation, transform, 1f);
-        m_wearNTear.Repair();
+        if (ResinGuardPlugin.RepairWhenProtectionApplied.Value == ResinGuardPlugin.Toggle.On)
+            m_wearNTear.Repair();
+        UpdateVisualAppearance();
     }
 
     public void OnDestroyed()
@@ -247,5 +258,64 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
             ItemDrop.OnCreateNew(Instantiate<GameObject>(m_resinItemDrops.First().gameObject, transform.position + Vector3.up + UnityEngine.Random.insideUnitSphere * 0.3f, Quaternion.Euler(0.0f, UnityEngine.Random.Range(0, 360), 0.0f)));
         for (int index = 0; index < (int)numTar; ++index)
             ItemDrop.OnCreateNew(Instantiate<GameObject>(m_resinItemDrops.Last().gameObject, transform.position + Vector3.up + UnityEngine.Random.insideUnitSphere * 0.3f, Quaternion.Euler(0.0f, UnityEngine.Random.Range(0, 360), 0.0f)));
+    }
+
+    public void UpdateVisualAppearance()
+    {
+        if (ResinGuardPlugin.EnableVisualUpdates.Value == ResinGuardPlugin.Toggle.Off || !m_nview.IsValid()) return;
+
+        // Get the current WearNTear component
+        WearNTear? wearNTear = m_wearNTear;
+        if (wearNTear == null) return;
+
+        // Ensure the material property block is initialized
+        wearNTear.m_propertyBlock ??= new MaterialPropertyBlock();
+
+        foreach (Renderer? renderer in m_wearNTear.m_renderers)
+        {
+            if (!renderer.material.HasProperty("_Color")) continue;
+            renderer.GetPropertyBlock(m_wearNTear.m_propertyBlock);
+            float resinRatio = Mathf.Clamp01(GetResin() / m_maxResin);
+            float tarRatio = Mathf.Clamp01(GetTar() / m_maxTar);
+
+            Color originalColor = OriginalColors[renderer];
+            if (originalColor == Color.clear)
+                originalColor = renderer.material.color;
+            Color resinColor = Color.Lerp(originalColor, Color.yellow, resinRatio);
+            Color tarColor = Color.Lerp(originalColor, Color.black, tarRatio);
+
+            // Blend both colors based on their ratios
+            Color finalColor = Color.Lerp(resinColor, tarColor, tarRatio / (resinRatio + tarRatio + 0.01f)); // Avoid division by zero
+            finalColor.a = originalColor.a;
+
+
+            m_wearNTear.m_propertyBlock.SetColor("_Color", finalColor);
+
+
+            if (renderer.material.HasProperty("_Color"))
+                m_wearNTear.m_propertyBlock.SetFloat("_Emission", tarRatio);
+
+            renderer.SetPropertyBlock(m_wearNTear.m_propertyBlock);
+        }
+    }
+
+    public static void ForceUpdateVisuals()
+    {
+        foreach (WearNTear wearNTear in WearNTear.s_allInstances)
+        {
+            wearNTear.gameObject.TryGetComponent(out ResinProtection resinProtection);
+            resinProtection?.UpdateVisualAppearance();
+        }
+    }
+
+    public static void UpdateProtectionValues()
+    {
+        foreach (WearNTear wearNTear in WearNTear.s_allInstances)
+        {
+            wearNTear.gameObject.TryGetComponent(out ResinProtection resinProtection);
+            if (resinProtection == null)
+                continue;
+            resinProtection.m_maxResin = ResinGuardPlugin.MaxResin.Value;
+        }
     }
 }

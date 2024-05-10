@@ -16,7 +16,7 @@ namespace ResinGuard
     public class ResinGuardPlugin : BaseUnityPlugin
     {
         internal const string ModName = "ResinGuard";
-        internal const string ModVersion = "1.0.0";
+        internal const string ModVersion = "1.1.0";
         internal const string Author = "Azumatt";
         private const string ModGUID = $"{Author}.{ModName}";
         private static string ConfigFileName = $"{ModGUID}.cfg";
@@ -39,6 +39,11 @@ namespace ResinGuard
             _serverConfigLocked = config("1 - General", "Lock Configuration", Toggle.On, "If on, the configuration is locked and can be changed by server admins only.");
             _ = ConfigSync.AddLockingConfigEntry(_serverConfigLocked);
             DecayTime = config("1 - General", "Decay Time", 3600f, "The time it takes for resin to decay in seconds. (Realtime)");
+            EnableVisualUpdates = Config.Bind("2 - Visual", "Enable Visual Updates", Toggle.On, "Enable or disable visual updates when resin or tar is applied.");
+            EnableVisualUpdates.SettingChanged += (sender, args) => { ResinProtection.ForceUpdateVisuals(); };
+            MaxResin = config("3 - Protection", "Max Resin", 10, "The maximum amount of resin a piece can have. WARNING, the higher the number the more health the piece will have. By default, it's balanced to double the health of the piece.");
+            MaxResin.SettingChanged += (sender, args) => { ResinProtection.UpdateProtectionValues(); };
+            RepairWhenProtectionApplied = config("3 - Protection", "Repair When Protection Applied", Toggle.On, "If on, the piece will be repaired when resin or tar is applied. This is balanced because technically it's costing more to repair it than if you used your hammer.");
 
             Assembly assembly = Assembly.GetExecutingAssembly();
             _harmony.PatchAll(assembly);
@@ -83,7 +88,9 @@ namespace ResinGuard
 
         private static ConfigEntry<Toggle> _serverConfigLocked = null!;
         public static ConfigEntry<float> DecayTime = null!;
-
+        public static ConfigEntry<Toggle> EnableVisualUpdates = null!;
+        public static ConfigEntry<int> MaxResin = null!;
+        public static ConfigEntry<Toggle> RepairWhenProtectionApplied = null!;
         private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
         {
             ConfigDescription extendedDescription = new(description.Description + (synchronizedSetting ? " [Synced with Server]" : " [Not Synced with Server]"), description.AcceptableValues, description.Tags);
