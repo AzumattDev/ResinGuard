@@ -184,7 +184,7 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
 
         user.Message(MessageHud.MessageType.Center, "$msg_added " + item.m_shared.m_name);
         user.GetInventory().RemoveItem(item.m_shared.m_name, 1);
-        m_nview.InvokeRPC("RPC_AddProtectionItem", item.m_shared.m_name);
+        m_nview.InvokeRPC(ZNetView.Everybody, "RPC_AddProtectionItem", item.m_shared.m_name);
         return true;
     }
 
