@@ -11,6 +11,15 @@ namespace ResinGuard;
 // TODO: Probably add filtering for what this applies to, for now it's fine.
 // TODO: Maybe create an item that applies resin to the object? Instead of using the UseItem method that is already in place.
 
+[HarmonyPatch(typeof(WearNTear), nameof(WearNTear.Awake))]
+static class WearNTearAwakePatch
+{
+    static void Postfix(WearNTear __instance)
+    {
+        __instance.gameObject.TryGetComponent(out ResinProtection resinProtection);
+        if (resinProtection == null) __instance.gameObject.AddComponent<ResinProtection>();
+    }
+}
 
 [HarmonyPatch(typeof(WearNTear), nameof(WearNTear.IsWet))]
 static class WearNTearIsWetPatch
