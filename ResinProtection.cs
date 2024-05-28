@@ -16,7 +16,7 @@ static class WearNTearAwakePatch
 {
     static void Postfix(WearNTear __instance)
     {
-        __instance.gameObject.TryGetComponent(out ResinProtection resinProtection);
+        ResinProtection? resinProtection = ResinProtection.GetResinProtection(__instance.gameObject);
         if (resinProtection == null) __instance.gameObject.AddComponent<ResinProtection>();
     }
 }
@@ -26,9 +26,8 @@ static class WearNTearIsWetPatch
 {
     static void Postfix(WearNTear __instance, ref bool __result)
     {
-        __instance.gameObject.TryGetComponent(out ResinProtection resinProtection);
-        if (resinProtection == null)
-            return;
+        ResinProtection? resinProtection = ResinProtection.GetResinProtection(__instance.gameObject);
+        if (resinProtection == null) return;
         if (resinProtection.GetTar() > 0.0)
             __result = false;
     }
@@ -39,9 +38,8 @@ static class WearNTearIsUnderWatertPatch
 {
     static void Postfix(WearNTear __instance, ref bool __result)
     {
-        __instance.gameObject.TryGetComponent(out ResinProtection resinProtection);
-        if (resinProtection == null)
-            return;
+        ResinProtection? resinProtection = ResinProtection.GetResinProtection(__instance.gameObject);
+        if (resinProtection == null) return;
         if (resinProtection.GetTar() > 0.0)
             __result = false;
     }
@@ -52,9 +50,8 @@ public static class RemoveWearNTear
 {
     private static void Postfix(WearNTear __instance, ref bool __result)
     {
-        __instance.gameObject.TryGetComponent(out ResinProtection resinProtection);
-        if (resinProtection == null)
-            return;
+        ResinProtection? resinProtection = ResinProtection.GetResinProtection(__instance.gameObject);
+        if (resinProtection == null) return;
         if (resinProtection.GetTar() > 0.0)
             __result = true;
     }
@@ -65,9 +62,8 @@ static class WearNTearApplyDamagePatch
 {
     static void Prefix(WearNTear __instance, ref float damage, HitData hitData = null)
     {
-        __instance.gameObject.TryGetComponent(out ResinProtection resinProtection);
-        if (resinProtection == null)
-            return;
+        ResinProtection? resinProtection = ResinProtection.GetResinProtection(__instance.gameObject);
+        if (resinProtection == null) return;
         if (resinProtection.GetResin() > 0.0 && hitData == null)
         {
             float resinRatio = Mathf.Clamp01(resinProtection.GetResin() / resinProtection.m_maxResin);
@@ -76,6 +72,18 @@ static class WearNTearApplyDamagePatch
 #if DEBUG
             ResinGuardPlugin.ResinGuardLogger.LogDebug($"Damage before resin: {damageBeforeResin}, Damage after resin: {damage}");
 #endif
+        }
+    }
+}
+
+[HarmonyPatch(typeof(WearNTear), nameof(WearNTear.OnDestroy))]
+static class WearNTearOnDestroyPatch
+{
+    static void Postfix(WearNTear __instance)
+    {
+        if (ResinProtection.CachedComponents.ContainsKey(__instance.gameObject))
+        {
+            ResinProtection.CachedComponents.Remove(__instance.gameObject);
         }
     }
 }
@@ -97,6 +105,9 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
     public int m_maxTar = 1;
     public readonly StringBuilder HoverTextBuilder = new();
     public readonly Dictionary<Renderer, Color> OriginalColors = new();
+    private const float UpdateInterval = 2f;
+    internal static readonly Dictionary<GameObject, ResinProtection> CachedComponents = new();
+
 
     public void Awake()
     {
@@ -130,12 +141,12 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
                 OriginalColors.Add(renderer, originalColor);
             }
         }
+
+        InvokeRepeating(nameof(UpdateVisualAppearance), 0.0f, UpdateInterval);
     }
 
     public void Update()
     {
-        UpdateVisualAppearance();
-
         if (!(GetResin() > 0)) return;
         float decayAmount = Time.deltaTime / ResinGuardPlugin.DecayTime.Value; // 1 hour default
         SetResin(Mathf.Max(0, GetResin() - decayAmount), true);
@@ -276,7 +287,7 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
         // Get the current WearNTear component
         WearNTear? wearNTear = m_wearNTear;
         if (wearNTear == null) return;
-
+        string? pieceName = Utils.GetPrefabName(transform.root.gameObject.name);
         // Ensure the material property block is initialized
         wearNTear.m_propertyBlock ??= new MaterialPropertyBlock();
 
@@ -284,14 +295,15 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
         {
             if (!renderer.material.HasProperty("_Color")) continue;
             renderer.GetPropertyBlock(m_wearNTear.m_propertyBlock);
-            float resinRatio = Mathf.Clamp01(GetResin() / m_maxResin);
-            float tarRatio = Mathf.Clamp01(GetTar() / m_maxTar);
+            float resinRatio = IsPieceExcluded(pieceName, isResin: true) ? 0 : Mathf.Clamp01(GetResin() / m_maxResin);
+            float tarRatio = IsPieceExcluded(pieceName, isResin: false) ? 0 : Mathf.Clamp01(GetTar() / m_maxTar);
+
 
             Color originalColor = OriginalColors[renderer];
             if (originalColor == Color.clear)
                 originalColor = renderer.material.color;
-            Color resinColor = Color.Lerp(originalColor, Color.yellow, resinRatio);
-            Color tarColor = Color.Lerp(originalColor, Color.black, tarRatio);
+            Color resinColor = Color.Lerp(originalColor, ResinGuardPlugin.ResinColor.Value, resinRatio);
+            Color tarColor = Color.Lerp(originalColor, ResinGuardPlugin.TarColor.Value, tarRatio);
 
             // Blend both colors based on their ratios
             Color finalColor = Color.Lerp(resinColor, tarColor, tarRatio / (resinRatio + tarRatio + 0.01f)); // Avoid division by zero
@@ -326,5 +338,22 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
                 continue;
             resinProtection.m_maxResin = ResinGuardPlugin.MaxResin.Value;
         }
+    }
+
+    public static ResinProtection? GetResinProtection(GameObject gameObject)
+    {
+        if (CachedComponents.TryGetValue(gameObject, out ResinProtection? resinProtection)) return resinProtection;
+        resinProtection = gameObject.GetComponent<ResinProtection>();
+        if (resinProtection != null)
+        {
+            CachedComponents[gameObject] = resinProtection;
+        }
+
+        return resinProtection;
+    }
+
+    public static bool IsPieceExcluded(string pieceName, bool isResin)
+    {
+        return isResin ? ResinGuardPlugin.excludedResinPieces.Contains(pieceName) : ResinGuardPlugin.excludedTarPieces.Contains(pieceName);
     }
 }

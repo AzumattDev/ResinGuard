@@ -112,6 +112,24 @@ across all clients.
 - **Enable Visual Updates**: Enable or disable the visual updates that show the resin and tar on the building pieces. Default is On.
 - **Max Resin**: Set the maximum amount of resin that can be applied to a building piece. Default is 10. The 10 is balanced to increase the health of the building piece by 100% at full capacity.
 - **Repair When Protection Applied**: Enable or disable the automatic repair of building pieces when resin or tar is applied. Default is On.
+- **Resin Color**: Set the color of the resin visual effect. Default is Yellow.
+- **Tar Color**: Set the color of the tar visual effect. Default is Gray.
+
+## Example YAML
+    
+ ```yaml
+# Resin and Tar Exclusion List
+# Add the PrefabName of pieces to exclude from Resin or Tar protection visuals.
+
+Resin:
+- PrefabNameToExclude1
+- PrefabNameToExclude2
+
+Tar:
+- PrefabNameToExclude1
+- PrefabNameToExclude2
+```
+
 
 <details>
 <summary><b>Installation Instructions</b></summary>

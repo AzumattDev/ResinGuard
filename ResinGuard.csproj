@@ -106,6 +106,9 @@
         <Reference Include="Unity.TextMeshPro">
             <HintPath>$(GamePath)\valheim_Data\Managed\Unity.TextMeshPro.dll</HintPath>
         </Reference>
+        <Reference Include="YamlDotNet, Version=15.0.0.0, Culture=neutral, PublicKeyToken=ec19458f3c15af5e, processorArchitecture=MSIL">
+          <HintPath>packages\YamlDotNet.15.1.4\lib\net47\YamlDotNet.dll</HintPath>
+        </Reference>
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Plugin.cs"/>
@@ -115,6 +118,9 @@
     <ItemGroup>
         <Content Include=".gitignore"/>
         <Content Include="environment.props"/>
+        <EmbeddedResource Include="Azumatt.ResinGuard_ExcludedPieces.yml">
+          <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </EmbeddedResource>
         <Content Include="ILRepack.targets"/>
         <Content Include="Libs\ServerSync.dll">
           <CopyToOutputDirectory>Always</CopyToOutputDirectory>

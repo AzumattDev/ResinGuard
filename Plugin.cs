@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -9,6 +10,8 @@ using HarmonyLib;
 using JetBrains.Annotations;
 using ServerSync;
 using UnityEngine;
+using YamlDotNet.Serialization;
+using YamlDotNet.Serialization.NamingConventions;
 
 namespace ResinGuard
 {
@@ -16,15 +19,20 @@ namespace ResinGuard
     public class ResinGuardPlugin : BaseUnityPlugin
     {
         internal const string ModName = "ResinGuard";
-        internal const string ModVersion = "1.1.3";
+        internal const string ModVersion = "1.2.0";
         internal const string Author = "Azumatt";
         private const string ModGUID = $"{Author}.{ModName}";
         private static string ConfigFileName = $"{ModGUID}.cfg";
         private static string ConfigFileFullPath = Paths.ConfigPath + Path.DirectorySeparatorChar + ConfigFileName;
+        private static string ExclusionFileName = $"{ModGUID}_ExcludedPieces.yml";
+        private static string ExclusionFileFullPath = Paths.ConfigPath + Path.DirectorySeparatorChar + ExclusionFileName;
         internal static string ConnectionError = "";
         private readonly Harmony _harmony = new(ModGUID);
         public static readonly ManualLogSource ResinGuardLogger = BepInEx.Logging.Logger.CreateLogSource(ModName);
         private static readonly ConfigSync ConfigSync = new(ModGUID) { DisplayName = ModName, CurrentVersion = ModVersion, MinimumRequiredVersion = ModVersion, ModRequired = false };
+        internal static HashSet<string> excludedResinPieces = [];
+        internal static HashSet<string> excludedTarPieces = [];
+        private static CustomSyncedValue<string> yamlConfigContent = new(ConfigSync, $"{ModGUID}_ExcludedPiecesYAML", "");
 
         public enum Toggle
         {
@@ -34,6 +42,16 @@ namespace ResinGuard
 
         public void Awake()
         {
+            if (!File.Exists(ExclusionFileFullPath))
+            {
+                WriteConfigFileFromResource(ExclusionFileFullPath);
+            }
+
+            yamlConfigContent.ValueChanged += LoadExcludedPiecesFromYaml;
+            yamlConfigContent.AssignLocalValue(File.ReadAllText(ExclusionFileFullPath));
+
+            LoadExcludedPiecesFromYaml();
+
             bool saveOnSet = Config.SaveOnConfigSet;
             Config.SaveOnConfigSet = false;
             _serverConfigLocked = config("1 - General", "Lock Configuration", Toggle.On, "If on, the configuration is locked and can be changed by server admins only.");
@@ -44,6 +62,9 @@ namespace ResinGuard
             MaxResin = config("3 - Protection", "Max Resin", 10, "The maximum amount of resin a piece can have. WARNING, the higher the number the more health the piece will have. By default, it's balanced to double the health of the piece.");
             MaxResin.SettingChanged += (sender, args) => { ResinProtection.UpdateProtectionValues(); };
             RepairWhenProtectionApplied = config("3 - Protection", "Repair When Protection Applied", Toggle.On, "If on, the piece will be repaired when resin or tar is applied. This is balanced because technically it's costing more to repair it than if you used your hammer.");
+            ResinColor = config("3 - Protection", "Resin Color", Color.yellow, "Visual color of the piece when resin is applied.", false);
+            TarColor = config("3 - Protection", "Tar Color", Color.gray, "Visual color of the piece when tar is applied.", false);
+
 
             Assembly assembly = Assembly.GetExecutingAssembly();
             _harmony.PatchAll(assembly);
@@ -66,7 +87,16 @@ namespace ResinGuard
             watcher.IncludeSubdirectories = true;
             watcher.SynchronizingObject = ThreadingHelper.SynchronizingObject;
             watcher.EnableRaisingEvents = true;
+
+            FileSystemWatcher yamlwatcher = new(Paths.ConfigPath, ExclusionFileName);
+            yamlwatcher.Changed += OnConfigFileChanged;
+            yamlwatcher.Created += OnConfigFileChanged;
+            yamlwatcher.Renamed += OnConfigFileChanged;
+            yamlwatcher.IncludeSubdirectories = true;
+            yamlwatcher.SynchronizingObject = ThreadingHelper.SynchronizingObject;
+            yamlwatcher.EnableRaisingEvents = true;
         }
+
 
         private void ReadConfigValues(object sender, FileSystemEventArgs e)
         {
@@ -83,6 +113,61 @@ namespace ResinGuard
             }
         }
 
+        private static void LoadExcludedPiecesFromYaml()
+        {
+            if (string.IsNullOrEmpty(yamlConfigContent.Value))
+                return;
+
+            using StringReader reader = new StringReader(yamlConfigContent.Value);
+            IDeserializer deserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
+
+            Dictionary<string, List<string>> yamlConfig = deserializer.Deserialize<Dictionary<string, List<string>>>(reader);
+            if (yamlConfig != null)
+            {
+                if (yamlConfig.TryGetValue("Resin", out List<string>? resin))
+                {
+                    excludedResinPieces = [..resin];
+                }
+
+                if (yamlConfig.TryGetValue("Tar", out List<string>? tar))
+                {
+                    excludedTarPieces = [..tar];
+                }
+            }
+        }
+
+        private static void WriteConfigFileFromResource(string configFilePath)
+        {
+            Assembly assembly = Assembly.GetExecutingAssembly();
+            string resourceName = $"{ModName}.{ExclusionFileName}";
+
+            using Stream resourceStream = assembly.GetManifestResourceStream(resourceName);
+            if (resourceStream == null)
+            {
+                throw new FileNotFoundException($"Resource '{resourceName}' not found in the assembly.");
+            }
+
+            using StreamReader reader = new StreamReader(resourceStream);
+            string contents = reader.ReadToEnd();
+
+            File.WriteAllText(configFilePath, contents);
+        }
+
+        private void OnConfigFileChanged(object sender, FileSystemEventArgs e)
+        {
+            if (!File.Exists(ExclusionFileFullPath)) return;
+            try
+            {
+                yamlConfigContent.AssignLocalValue(File.ReadAllText(ExclusionFileFullPath));
+            }
+            catch
+            {
+                ResinGuardLogger.LogError($"There was an issue loading your {ExclusionFileName}");
+                ResinGuardLogger.LogError("Please check your config entries for spelling and format!");
+            }
+
+            LoadExcludedPiecesFromYaml();
+        }
 
         #region ConfigOptions
 
@@ -91,6 +176,9 @@ namespace ResinGuard
         public static ConfigEntry<Toggle> EnableVisualUpdates = null!;
         public static ConfigEntry<int> MaxResin = null!;
         public static ConfigEntry<Toggle> RepairWhenProtectionApplied = null!;
+        public static ConfigEntry<Color> ResinColor = null!;
+        public static ConfigEntry<Color> TarColor = null!;
+
         private ConfigEntry<T> config<T>(string group, string name, T value, ConfigDescription description, bool synchronizedSetting = true)
         {
             ConfigDescription extendedDescription = new(description.Description + (synchronizedSetting ? " [Synced with Server]" : " [Not Synced with Server]"), description.AcceptableValues, description.Tags);
@@ -116,31 +204,6 @@ namespace ResinGuard
             [UsedImplicitly] public Action<ConfigEntryBase>? CustomDrawer = null!;
         }
 
-        class AcceptableShortcuts : AcceptableValueBase
-        {
-            public AcceptableShortcuts() : base(typeof(KeyboardShortcut))
-            {
-            }
-
-            public override object Clamp(object value) => value;
-            public override bool IsValid(object value) => true;
-
-            public override string ToDescriptionString() => $"# Acceptable values: {string.Join(", ", UnityInput.Current.SupportedKeyCodes)}";
-        }
-
         #endregion
-    }
-
-    public static class KeyboardExtensions
-    {
-        public static bool IsKeyDown(this KeyboardShortcut shortcut)
-        {
-            return shortcut.MainKey != KeyCode.None && Input.GetKeyDown(shortcut.MainKey) && shortcut.Modifiers.All(Input.GetKey);
-        }
-
-        public static bool IsKeyHeld(this KeyboardShortcut shortcut)
-        {
-            return shortcut.MainKey != KeyCode.None && Input.GetKey(shortcut.MainKey) && shortcut.Modifiers.All(Input.GetKey);
-        }
     }
 }
