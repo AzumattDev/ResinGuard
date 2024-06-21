@@ -185,8 +185,12 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
         if (item == null) return false;
         if (!m_resinItems.Contains(item.m_shared.m_name))
         {
-            if (item.m_shared.m_buildPieces == null || item.m_shared.m_buildPieces.m_pieces.Count == 0) // Eliminate hammers from seeing this message. It's highly annoying when going to repair the piece.
-                user.Message(MessageHud.MessageType.Center, "$msg_wrongitem");
+            if (ResinGuardPlugin.ShowWrongItemMessage.Value == ResinGuardPlugin.Toggle.On)
+            {
+                if (item.m_shared.m_buildPieces == null || item.m_shared.m_buildPieces.m_pieces.Count == 0) // Eliminate hammers from seeing this message. It's highly annoying when going to repair the piece.
+                    user.Message(MessageHud.MessageType.Center, "$msg_wrongitem");
+            }
+
             return false;
         }
 

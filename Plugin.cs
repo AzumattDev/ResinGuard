@@ -19,7 +19,7 @@ namespace ResinGuard
     public class ResinGuardPlugin : BaseUnityPlugin
     {
         internal const string ModName = "ResinGuard";
-        internal const string ModVersion = "1.2.0";
+        internal const string ModVersion = "1.2.1";
         internal const string Author = "Azumatt";
         private const string ModGUID = $"{Author}.{ModName}";
         private static string ConfigFileName = $"{ModGUID}.cfg";
@@ -57,6 +57,7 @@ namespace ResinGuard
             _serverConfigLocked = config("1 - General", "Lock Configuration", Toggle.On, "If on, the configuration is locked and can be changed by server admins only.");
             _ = ConfigSync.AddLockingConfigEntry(_serverConfigLocked);
             DecayTime = config("1 - General", "Decay Time", 3600f, "The time it takes for resin to decay in seconds. (Realtime)");
+            ShowWrongItemMessage = config("1 - General", "Show Wrong Item Message", Toggle.Off, "If on, a message will be shown when you try to use an item that isn't resin or tar when hovering over a piece.", false);
             EnableVisualUpdates = Config.Bind("2 - Visual", "Enable Visual Updates", Toggle.On, "Enable or disable visual updates when resin or tar is applied.");
             EnableVisualUpdates.SettingChanged += (sender, args) => { ResinProtection.ForceUpdateVisuals(); };
             MaxResin = config("3 - Protection", "Max Resin", 10, "The maximum amount of resin a piece can have. WARNING, the higher the number the more health the piece will have. By default, it's balanced to double the health of the piece.");
@@ -173,6 +174,7 @@ namespace ResinGuard
 
         private static ConfigEntry<Toggle> _serverConfigLocked = null!;
         public static ConfigEntry<float> DecayTime = null!;
+        public static ConfigEntry<Toggle> ShowWrongItemMessage = null!;
         public static ConfigEntry<Toggle> EnableVisualUpdates = null!;
         public static ConfigEntry<int> MaxResin = null!;
         public static ConfigEntry<Toggle> RepairWhenProtectionApplied = null!;
