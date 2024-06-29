@@ -116,7 +116,7 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
             m_nview = GetComponentInParent<ZNetView>();
         m_wearNTear = GetComponent<WearNTear>();
         m_piece = GetComponent<Piece>();
-        if (m_nview.GetZDO() == null)
+        if (m_nview.GetZDO() == null || m_piece == null || m_wearNTear == null)
             return;
         m_nview.Register("RPC_AddProtectionItem", new Action<long, string>(RPC_AddProtectionItem));
         m_wearNTear.m_onDestroyed += OnDestroyed;
@@ -154,6 +154,8 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
 
     public string GetHoverText()
     {
+        if (m_nview.GetZDO() == null || m_piece == null || m_wearNTear == null)
+            return string.Empty;
         HoverTextBuilder.Clear();
         HoverTextBuilder.Append(Localization.instance.Localize(m_piece.m_name));
 

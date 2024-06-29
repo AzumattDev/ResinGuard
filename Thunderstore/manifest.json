@@ -1,6 +1,6 @@
 {
   "name": "ResinGuard",
-  "version_number": "1.2.1",
+  "version_number": "1.2.2",
   "website_url": "https://discord.gg/pdHgy6Bsng",
   "description": "WIP Mod. Allows you to apply resin and tar to your building pieces. Resin increases the durability of the pieces, making them more resistant to damage. Tar provides complete protection against water damage, whether from rain or being submerged.",
   "dependencies": [
