@@ -156,6 +156,7 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
     {
         if (m_nview.GetZDO() == null || m_piece == null || m_wearNTear == null)
             return string.Empty;
+        if (!IsInPlayerHotbar()) return string.Empty;
         HoverTextBuilder.Clear();
         HoverTextBuilder.Append(Localization.instance.Localize(m_piece.m_name));
 
@@ -185,6 +186,7 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
     public bool UseItem(Humanoid user, ItemDrop.ItemData item)
     {
         if (item == null) return false;
+        if (!IsInPlayerHotbar()) return false;
         if (!m_resinItems.Contains(item.m_shared.m_name))
         {
             if (ResinGuardPlugin.ShowWrongItemMessage.Value == ResinGuardPlugin.Toggle.On)
@@ -361,5 +363,24 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
     public static bool IsPieceExcluded(string pieceName, bool isResin)
     {
         return isResin ? ResinGuardPlugin.excludedResinPieces.Contains(pieceName) : ResinGuardPlugin.excludedTarPieces.Contains(pieceName);
+    }
+
+    private bool IsInPlayerHotbar()
+    {
+        bool show = false;
+        if (Player.m_localPlayer != null)
+        {
+            List<ItemDrop.ItemData>? hotbarItems = Player.m_localPlayer?.GetInventory().GetHotbar();
+            if (hotbarItems != null)
+                foreach (ItemDrop.ItemData hotbarItem in hotbarItems)
+                {
+                    if (hotbarItem.m_shared != null && m_resinItems.Contains(hotbarItem.m_shared.m_name))
+                    {
+                        show = true;
+                    }
+                }
+        }
+
+        return show;
     }
 }
