@@ -19,7 +19,7 @@ namespace ResinGuard
     public class ResinGuardPlugin : BaseUnityPlugin
     {
         internal const string ModName = "ResinGuard";
-        internal const string ModVersion = "1.2.3";
+        internal const string ModVersion = "1.2.4";
         internal const string Author = "Azumatt";
         private const string ModGUID = $"{Author}.{ModName}";
         private static string ConfigFileName = $"{ModGUID}.cfg";
@@ -39,6 +39,8 @@ namespace ResinGuard
             On = 1,
             Off = 0
         }
+        
+        private static readonly IDeserializer YamlDeserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
 
         public void Awake()
         {
@@ -120,9 +122,7 @@ namespace ResinGuard
                 return;
 
             using StringReader reader = new StringReader(yamlConfigContent.Value);
-            IDeserializer deserializer = new DeserializerBuilder().WithNamingConvention(CamelCaseNamingConvention.Instance).Build();
-
-            Dictionary<string, List<string>> yamlConfig = deserializer.Deserialize<Dictionary<string, List<string>>>(reader);
+            Dictionary<string, List<string>> yamlConfig = YamlDeserializer.Deserialize<Dictionary<string, List<string>>>(reader);
             if (yamlConfig != null)
             {
                 if (yamlConfig.TryGetValue("Resin", out List<string>? resin))
