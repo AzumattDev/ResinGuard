@@ -136,6 +136,7 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
             m_wearNTear.m_propertyBlock ??= new MaterialPropertyBlock();
             foreach (Renderer? renderer in m_wearNTear.m_renderers)
             {
+                if (!renderer.material.HasProperty(s_ColorPropertyID)) continue;
                 renderer.GetPropertyBlock(m_wearNTear.m_propertyBlock);
 
                 Color originalColor = m_wearNTear.m_propertyBlock.GetColor(s_ColorPropertyID);
@@ -325,7 +326,7 @@ public class ResinProtection : MonoBehaviour, Hoverable, Interactable
             m_wearNTear.m_propertyBlock.SetColor(s_ColorPropertyID, finalColor);
 
 
-            if (renderer.material.HasProperty(s_ColorPropertyID))
+            if (renderer.material.HasProperty(s_ColorPropertyID) && renderer.material.HasProperty(s_EmissionPropertyID))
                 m_wearNTear.m_propertyBlock.SetFloat(s_EmissionPropertyID, tarRatio);
 
             renderer.SetPropertyBlock(m_wearNTear.m_propertyBlock);
